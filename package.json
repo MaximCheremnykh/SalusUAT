@@ -1,0 +1,25 @@
+{
+  "name": "playwrightjs",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "npx playwright test",
+    "test:headed": "npx playwright test --headed",
+    "test:debug": "npx playwright test --debug",
+    "test:one": "npx playwright test tests/login.spec.ts",
+    "test:smoke": "playwright test --project=smoke",
+    "test:home": "npx playwright test tests/03-home-dashboard.spec.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.1",
+    "@types/electron": "^1.4.38",
+    "@types/node": "^24.0.14",
+    "dotenv": "^17.2.0",
+    "electron": "^37.2.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  },
+  "playwright": {
+    "globalSetup": "./utils/global-setup.ts"
+  }
+}

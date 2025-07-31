@@ -1,0 +1,11 @@
+{
+  "type": "module",
+  "compilerOptions": {
+    "checkJs": false,
+    "allowJs": true,
+    "target": "esnext",
+    "module": "esnext",
+    "moduleResolution": "node"
+  },
+  "exclude": ["node_modules"]
+}
