@@ -7,6 +7,7 @@ export default defineConfig({
   // ---------- Test discovery ----------
   testDir: "./tests",
   fullyParallel: true,
+  
 
   // ---------- Reporters ----------
   // Shows a live ✓ / ✗ list in Git Bash **and** generates an HTML report for CI
