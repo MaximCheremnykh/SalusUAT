@@ -1,3 +1,4 @@
+//01.1-login.spec.ts
 import { test, expect, chromium, type Page } from '@playwright/test';
 
 const BASE_LOGIN = (process.env.SF_LOGIN_URL ?? '').replace(/\/$/, '');

@@ -1,3 +1,4 @@
+//01.2-fresh-incognito-login.spec.ts
 import { test, expect, chromium } from '@playwright/test';
 
 const BASE_LOGIN = (process.env.SF_LOGIN_URL ?? '').replace(/\/$/, '');
