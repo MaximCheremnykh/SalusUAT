@@ -124,7 +124,7 @@ test.describe("CSRO Dashboard (Volunteer) : Monarch tab", () => {
       await dash.clickMetricBody("Total Rows Imported");
     });
 
-    await step("Total Unique PAX", async () => {
+    await step("Total Unique PAX ", async () => {
       await dash.clickMetric("Total Unique PAX");
       await dash.clickMetricBody("Total Unique PAX");
     });

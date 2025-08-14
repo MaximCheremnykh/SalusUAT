@@ -465,4 +465,22 @@ export class DashboardPage {
     await tsLocator.waitFor({ state: "visible", timeout: 10_000 });
     return tsLocator.innerText();
   }
+
+async refreshDashboard(
+  times = 1,
+  opts: { between?: number; handleLimitToast?: boolean } = {}
+) {
+  const { between = 800, handleLimitToast = true } = opts;
+
+  for (let i = 0; i < times; i++) {
+    await this.refreshDashboardSmart();
+    if (handleLimitToast) {
+      await this.dismissRefreshLimitError().catch(() => void 0);
+    }
+    if (i < times - 1 && between > 0) {
+      await this.page.waitForTimeout(between);
+    }
+  }
+}
+
 }
