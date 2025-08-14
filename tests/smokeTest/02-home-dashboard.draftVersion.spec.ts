@@ -66,10 +66,10 @@ test.describe("CSRO Dashboard (Volunteer)", () => {
       await page.waitForTimeout(1000);
     });
 
-    await step("Dismiss refresh-limit error", async () => {
-      await dash.dismissRefreshLimitError();
-      await page.waitForTimeout(3000);
-    });
+    // await step("Dismiss refresh-limit error", async () => {
+    //   await dash.dismissRefreshLimitError();
+    //   await page.waitForTimeout(3000);
+    // });
     //  await step("Dismiss refresh-limit error", async () => {
     //   await dash.dismissRefreshLimitError();
     // });
