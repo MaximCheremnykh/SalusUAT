@@ -1,4 +1,4 @@
-// pages/DashboardPage.ts
+// pages/DashboardPageMonarch.ts
 import { type Page, type Locator, FrameLocator, expect } from "@playwright/test";
 import { paxMetricsHeading } from "../utils/selectors";
 
@@ -15,8 +15,29 @@ export class DashboardPage {
   private async _ensureViewport() {
     await this.page.setViewportSize({ width: 1860, height: 940 });
     await this.page.evaluate(() => {
+      // best-effort maximize
       window.moveTo(0, 0);
       window.resizeTo(screen.width, screen.height);
+    });
+  }
+
+  /** Reset window + inner scrollers to the very top (stable start). */
+  async resetDashboardViewport() {
+    await this.waitForDashboardFrames();
+    await this.dashboardFrame.locator("body").evaluate((body) => {
+      const doc = body.ownerDocument!;
+      const win = doc.defaultView!;
+      win.scrollTo(0, 0);
+      const sels = [
+        ".ps-container",
+        ".ps",
+        ".slds-scrollable_y",
+        ".slds-scrollable",
+        "main",
+        "section",
+        "div[role='main']",
+      ];
+      for (const el of doc.querySelectorAll<HTMLElement>(sels.join(","))) el.scrollTop = 0;
     });
   }
 
@@ -32,16 +53,14 @@ export class DashboardPage {
   async openDashboard() {
     await this._ensureViewport();
     const { SF_LOGIN_URL, SF_HOME_URL, SF_USER, SF_PWD } = process.env;
-    if (!SF_LOGIN_URL || !SF_USER || !SF_PWD) {
-      throw new Error("Missing Salesforce login env vars");
-    }
+    if (!SF_LOGIN_URL || !SF_USER || !SF_PWD) throw new Error("Missing Salesforce login env vars");
 
     await this.page.goto(SF_LOGIN_URL, { waitUntil: "load" });
 
     const onLogin = await this.page.locator('input[name="username"]').isVisible().catch(() => false);
     if (onLogin) {
       await this.page.fill('input[name="username"]', SF_USER!);
-      await this.page.fill('input[name="pw"]',       SF_PWD!);
+      await this.page.fill('input[name="pw"]', SF_PWD!);
       await Promise.all([
         this.page.waitForURL("**/lightning/**", { timeout: 45_000 }),
         this.page.click('input[name="Login"]'),
@@ -84,8 +103,7 @@ export class DashboardPage {
     const headerText = this.dashboardFrame.locator(".slds-page-header__title", { hasText: expected }).first();
     const headerAttr = this.dashboardFrame.locator(`//*[@title=${JSON.stringify(expected)}]`).first();
     const headerAttrContains = this.dashboardFrame
-      .locator(`xpath=//*[@title and contains(@title, ${JSON.stringify(expected)})]`)
-      .first();
+      .locator(`xpath=//*[@title and contains(@title, ${JSON.stringify(expected)})]`).first();
 
     await expect(headerText.or(headerAttr).or(headerAttrContains)).toBeVisible({ timeout });
   }
@@ -115,20 +133,37 @@ export class DashboardPage {
   }
 
   /* ─────────────────────── TAB SWITCH HELPERS ────────────────── */
+
+  /** pick the single visible tab (avoid clones in hidden tablists) */
+  private async _visibleTab(name: string): Promise<Locator> {
+    const list = this.page.locator('[role="tablist"]:not([hidden])').first();
+    let tabs = list.getByRole("tab", { name, exact: true });
+    if ((await tabs.count()) === 0) tabs = this.page.getByRole("tab", { name, exact: true });
+
+    const n = await tabs.count();
+    for (let i = 0; i < n; i++) {
+      const t = tabs.nth(i);
+      if (await t.isVisible().catch(() => false)) return t;
+    }
+    return tabs.first();
+  }
+
   async navigateToMonarchTab() { await this._switchToTab("Monarch"); }
   async navigateToTadpoleTab() { await this._switchToTab("Tadpole"); }
   async navigateToBogartTab()  { await this._switchToTab("Bogart");  }
   async navigateToBluebirdTab(){ await this._switchToTab("Bluebird");}
 
   async verifyMonarchSelected() {
-    await expect(this.page.getByRole("tab", { name: "Monarch" }))
-      .toHaveAttribute("aria-selected", "true", { timeout: 10_000 });
+    const tab = await this._visibleTab("Monarch");
+    await expect(tab).toHaveAttribute("aria-selected", "true", { timeout: 10_000 });
+  }
+  async verifyTadpoleSelected() {
+    const tab = await this._visibleTab("Tadpole");
+    await expect(tab).toHaveAttribute("aria-selected", "true", { timeout: 10_000 });
   }
 
-  private async _switchToTab(
-    name: "Monarch" | "Tadpole" | "Bogart" | "Bluebird"
-  ) {
-    const tab = this.page.getByRole("tab", { name });
+  private async _switchToTab(name: "Monarch" | "Tadpole" | "Bogart" | "Bluebird") {
+    const tab = await this._visibleTab(name);
 
     if ((await tab.getAttribute("aria-selected")) === "true") {
       await this.waitForDashboardFrames();
@@ -140,8 +175,8 @@ export class DashboardPage {
     await tab.click();
     await expect(tab).toHaveAttribute("aria-selected", "true", { timeout: 10_000 });
 
-    await oldPanel.waitFor({ state: "hidden", timeout: 10_000 });
-    await this.page.waitForTimeout(500);
+    await oldPanel.waitFor({ state: "hidden", timeout: 10_000 }).catch(() => void 0);
+    await this.page.waitForTimeout(300);
     await this.waitForDashboardFrames();
   }
 
@@ -175,18 +210,13 @@ export class DashboardPage {
   }
 
   /* ────────────────────── SCROLL HELPERS ─────────────────────── */
-
-  /** Scrolls the dashboard (window or inner scroller like .ps-container) by `pixels`. */
   private async _scrollDashboardBy(pixels: number) {
     await this.waitForDashboardFrames();
     await this.dashboardFrame.locator("body").evaluate((body, px) => {
       const doc = body.ownerDocument!;
       const win = doc.defaultView!;
-      // Scroll window
       win.scrollBy(0, px);
-
-      // Try the first viable inner scroller
-      const selectors = [
+      const sels = [
         ".ps-container",
         ".ps",
         ".slds-scrollable_y",
@@ -195,55 +225,65 @@ export class DashboardPage {
         "section",
         "div[role='main']",
       ];
-      const els = Array.from(doc.querySelectorAll<HTMLElement>(selectors.join(",")));
+      const els = Array.from(doc.querySelectorAll<HTMLElement>(sels.join(",")));
       const isScrollable = (el: HTMLElement) => {
         const s = win.getComputedStyle(el);
         return el.scrollHeight > el.clientHeight + 2 && /(auto|scroll)/.test(s.overflowY);
       };
       const scroller = els.find(isScrollable);
-      if (scroller) scroller.scrollTop = Math.min(scroller.scrollTop + px, scroller.scrollHeight);
+      if (scroller) scroller.scrollTop += px;
     }, pixels);
   }
 
-  /** Scrolls down in pages until the given metric text exists & is visible in the viewport. */
   async scrollToMetric(title: string, opts: { step?: number; maxScrolls?: number } = {}) {
     const { step = 800, maxScrolls = 30 } = opts;
     await this.waitForDashboardFrames();
 
-    const target = (): Locator =>
+    const target = () =>
       this.dashboardFrame.locator(`xpath=.//*[normalize-space()=${JSON.stringify(title)}]`).first();
 
-    if (await target().isVisible().catch(() => false)) {
-      await target().scrollIntoViewIfNeeded();
-      return;
-    }
+    const visible = async () => await target().isVisible().catch(() => false);
+    if (await visible()) { await target().scrollIntoViewIfNeeded(); return; }
 
-    for (let i = 0; i < maxScrolls; i++) {
-      await this._scrollDashboardBy(step);
-      if (await target().isVisible().catch(() => false)) {
-        await target().scrollIntoViewIfNeeded();
-        return;
+    const scan = async (dir: 1 | -1) => {
+      for (let i = 0; i < maxScrolls; i++) {
+        await this._scrollDashboardBy(dir * step);
+        if (await visible()) { await target().scrollIntoViewIfNeeded(); return true; }
+        await this.page.waitForTimeout(80);
       }
-      await this.page.waitForTimeout(120);
-    }
-    throw new Error(`Could not bring "${title}" into view after ${maxScrolls} scrolls.`);
+      return false;
+    };
+
+    if (await scan(1)) return;
+    for (let i = 0; i < maxScrolls; i++) await this._scrollDashboardBy(-step * 1.2);
+    if (await visible()) { await target().scrollIntoViewIfNeeded(); return; }
+    if (await scan(1)) return;
+    if (await scan(-1)) return;
+
+    throw new Error(`Could not bring "${title}" into view after scanning.`);
   }
 
   /* ─────────────────────── METRIC EXTRACTION ─────────────────── */
   async getMetricValue(tile: string): Promise<number> {
     await this.waitForDashboardFrames();
 
-    // Header
-    const header = this.dashboardFrame
-      .locator(`xpath=.//*[normalize-space()=${JSON.stringify(tile)}]`)
-      .first();
+    // keep mouse away from tiles to prevent tooltips leaking "100" etc.
+    await this._parkMouseInFrameCorner();
 
-    if (!(await header.isVisible().catch(() => false))) {
-      await this.scrollToMetric(tile);
+    // find first visible header for the tile
+    const headers = this.dashboardFrame.locator(
+      `xpath=.//*[normalize-space()=${JSON.stringify(tile)}]`
+    );
+    let header = headers.first();
+    const cnt = await headers.count();
+    for (let i = 0; i < cnt; i++) {
+      const h = headers.nth(i);
+      if (await h.isVisible().catch(() => false)) { header = h; break; }
     }
+    if (!(await header.isVisible().catch(() => false))) await this.scrollToMetric(tile);
     await expect(header).toBeVisible({ timeout: 10_000 });
 
-    // Container (first matching candidate)
+    // locate the widget container that actually holds the metric
     const containerCandidates = [
       `xpath=ancestor::*[starts-with(@id,"widget-canvas-")][1]`,
       `xpath=ancestor::*[contains(@class,"dashboardWidget")][1]`,
@@ -260,15 +300,13 @@ export class DashboardPage {
     if (!(await container.count())) {
       throw new Error(`No container found for tile "${tile}" (header exists).`);
     }
-
     await container.scrollIntoViewIfNeeded();
     await expect(container).toBeVisible({ timeout: 10_000 });
 
-    // A) table-ish → next cell
+    // A) table-like next-cell
     const siblingCellNumber = container
       .locator(
-        `xpath=(.//ancestor::*[self::th or self::td][1]/following-sibling::*[1])
-               //*[normalize-space()!=""]`
+        `xpath=(.//ancestor::*[self::th or self::td][1]/following-sibling::*[1])//*[normalize-space()!=""]`
       )
       .filter({ hasText: /\d/ })
       .first();
@@ -286,12 +324,11 @@ export class DashboardPage {
       if (m) return Number(m[1].replace(/,/g, ""));
     }
 
-    // C) Heuristic: pick visible descendant with biggest font containing a number.
-    //    Ignore footer/link/tool strings; ignore numbers immediately following a comma.
+    // C) Heuristic in DOM: prefer largest, visible number; DO NOT fuse "19,753 100".
     const heuristic = await container.evaluate((root) => {
       const months = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
-      const bannedTokens = ["as of","view report","more dashboard actions","refresh","last refresh","am","pm"];
-      const nearFooter = 44; // px from bottom of the widget
+      const banned = ["as of","view report","more dashboard actions","refresh","last refresh","am","pm"];
+      const nearFooter = 44;
 
       const isVisible = (el: Element) => {
         const e = el as HTMLElement;
@@ -301,56 +338,59 @@ export class DashboardPage {
         return r.width > 3 && r.height > 3;
       };
 
-      const containerRect = (root as HTMLElement).getBoundingClientRect();
-      const els = Array.from(root.querySelectorAll<HTMLElement>("*:not(script):not(style)")).filter(isVisible);
+      // extract strictly separated numbers; treat ONLY commas as thousand separators
+      const extractNums = (s: string): number[] => {
+        const out: number[] = [];
+        const re = /\d{1,3}(?:,\d{3})+|\d+/g;
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(s))) {
+          // skip numbers immediately after a comma, e.g., ", 100"
+          let j = m.index - 1;
+          while (j >= 0 && /\s/.test(s[j])) j--;
+          if (j >= 0 && s[j] === ",") continue;
+          out.push(Number(m[0].replace(/,/g, "")));
+        }
+        return out;
+      };
 
-      let best = { score: -1, num: NaN };
+      const containerRect = (root as HTMLElement).getBoundingClientRect();
+      const els = Array.from(root.querySelectorAll<HTMLElement>("*:not(script):not(style)"))
+        .filter(isVisible);
+
+      let bestScore = -1;
+      let bestVal: number | null = null;
 
       for (const el of els) {
         const text = el.innerText?.trim();
         if (!text) continue;
 
         const lower = text.toLowerCase();
-        if (bannedTokens.some(t => lower.includes(t)) || months.some(m => lower.includes(m))) continue;
+        if (banned.some(t => lower.includes(t)) || months.some(m => lower.includes(m))) continue;
 
         const r = el.getBoundingClientRect();
-        if (containerRect.bottom - r.bottom < nearFooter) continue; // likely footer
+        if (containerRect.bottom - r.bottom < nearFooter) continue;
 
-        // join digits split by spans; then tokenize numbers while skipping those immediately after a comma
-        const normalized = text.replace(/\s+(?=[\d])/g, "");
-        const tokens: string[] = [];
-        {
-          const re = /\d{1,3}(?:,\d{3})+|\d+/g;
-          let m: RegExpExecArray | null;
-          while ((m = re.exec(normalized))) {
-            // look left (skip spaces) and drop if the previous non-space char is a comma
-            let j = m.index - 1;
-            while (j >= 0 && /\s/.test(normalized[j])) j--;
-            if (j >= 0 && normalized[j] === ",") continue; // ignore numbers after a comma
-            tokens.push(m[0]);
-          }
-        }
-        if (!tokens.length) continue;
+        const nums = extractNums(text);
+        if (!nums.length) continue;
 
         const cs = getComputedStyle(el);
         const font = parseFloat(cs.fontSize || "0");
         const area = r.width * r.height;
         const score = font * 1000 + area;
 
-        // prefer comma-separated then the longest token
-        const token = tokens.find(t => t.includes(",")) ?? tokens.reduce((a, b) => (b.length > a.length ? b : a));
-        const value = Number(token.replace(/,/g, ""));
-        if (!Number.isFinite(value)) continue;
+        // prefer the largest number in this element
+        const value = nums.sort((a, b) => b - a)[0];
 
-        if (score > best.score) best = { score, num: value };
+        if (score > bestScore) { bestScore = score; bestVal = value; }
       }
 
-      return Number.isFinite(best.num) ? best.num : null;
+      return bestVal;
     });
 
     if (heuristic != null) return heuristic;
 
-    // D) Fallback — strip obvious footer bits, then first number not after a comma
+    // D) Fallback — first STRICTLY comma-grouped number (or plain integer)
+    //    and NOT immediately after a comma.
     let full = (await container.innerText()).replace(/\s+/g, " ").trim();
     full = full.replace(/As of .*$/i, "");
     {
@@ -359,7 +399,7 @@ export class DashboardPage {
       while ((m = re.exec(full))) {
         let j = m.index - 1;
         while (j >= 0 && /\s/.test(full[j])) j--;
-        if (j >= 0 && full[j] === ",") continue;
+        if (j >= 0 && full[j] === ",") continue; // skip ", 100"
         return Number(m[0].replace(/,/g, ""));
       }
     }
@@ -407,7 +447,8 @@ export class DashboardPage {
       const c = header.locator(sel).first();
       if (await c.count()) { container = c; break; }
     }
-    if (!(await container.count())) throw new Error(`No body container found for tile "${tile}".`);
+    if (!(await container.count()))
+      throw new Error(`No body container found for tile "${tile}".`);
 
     await container.scrollIntoViewIfNeeded();
     const body = container.locator(".ps-container > div, .ps-content > div, .slds-scrollable, div").first();
@@ -466,21 +507,19 @@ export class DashboardPage {
     return tsLocator.innerText();
   }
 
-async refreshDashboard(
-  times = 1,
-  opts: { between?: number; handleLimitToast?: boolean } = {}
-) {
-  const { between = 800, handleLimitToast = true } = opts;
-
-  for (let i = 0; i < times; i++) {
-    await this.refreshDashboardSmart();
-    if (handleLimitToast) {
-      await this.dismissRefreshLimitError().catch(() => void 0);
-    }
-    if (i < times - 1 && between > 0) {
-      await this.page.waitForTimeout(between);
+  async refreshDashboard(times = 1, opts: { between?: number; handleLimitToast?: boolean } = {}) {
+    const { between = 800, handleLimitToast = true } = opts;
+    for (let i = 0; i < times; i++) {
+      await this.refreshDashboardSmart();
+      if (handleLimitToast) await this.dismissRefreshLimitError().catch(() => void 0);
+      if (i < times - 1 && between > 0) await this.page.waitForTimeout(between);
     }
   }
-}
 
+  /** park mouse inside frame to avoid hover tooltips covering numbers */
+  private async _parkMouseInFrameCorner() {
+    await this.waitForDashboardFrames();
+    const box = await this.dashboardFrame.locator("body").boundingBox();
+    if (box) await this.page.mouse.move(box.x + 1, box.y + 1);
+  }
 }

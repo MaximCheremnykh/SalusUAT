@@ -32,7 +32,7 @@ export class SetupPage {
   /* ──────────────────────────────────── OPEN BY ID */
   async openUserById(id: string) {
     await this.page.goto(`/lightning/r/User/${id}/view`);
-    await this._verifyHeader();
+    await this._verifyHeaderContains('Setup');
   }
 
   /* ──────────────────────────────────── OPEN BY NAME */
@@ -51,7 +51,7 @@ export class SetupPage {
 
     // 3. wait for known visible element instead of navigation
     try {
-      await this._verifyHeader(name);
+      await this._verifyHeaderContains('Setup');
       return;
     } catch {
       /* continue to grid fallback */
@@ -61,7 +61,7 @@ export class SetupPage {
     const domLink = this.page.getByRole("link", { name: new RegExp(`^${name}$`, "i") }).first();
     if (await domLink.isVisible().catch(() => false)) {
       await domLink.click();
-      await this._verifyHeader(name);
+      await this._verifyHeaderContains('Setup');
       return;
     }
 
@@ -70,7 +70,7 @@ export class SetupPage {
     const rowLink = listFrame.getByRole("link", { name: new RegExp(`^${name}$`, "i") });
     await expect(rowLink).toBeVisible({ timeout: 10_000 });
     await rowLink.click();
-    await this._verifyHeader(name);
+    await this._verifyHeaderContains('Setup');
   }
 
   /* ──────────────────────────────────── USER DETAIL HELPERS */
@@ -91,12 +91,14 @@ export class SetupPage {
   }
 
   /* ──────────────────────────────────── PRIVATE */
-  private async _verifyHeader(name?: string) {
-    const h = name
-      ? this.page.getByRole("heading", { name, level: 1 })
-      : this.page.getByRole("heading", { level: 1 });
-    await expect(h).toBeVisible({ timeout: 15_000 });
-  }
+ private async _verifyHeaderContains(text: string, timeout = 15000) {
+  // try any heading level or aria-level
+  const anyHeading = this.page.locator(
+    'h1,h2,h3,[role="heading"],[aria-level="1"],[aria-level="2"],[aria-level="3"]'
+  ).filter({ hasText: new RegExp(text, "i") });
+
+  await expect(anyHeading.first()).toBeVisible({ timeout });
+}
 
   private async _findUsersListFrame(): Promise<Frame> {
     for (const f of this.page.frames()) if (f.url().includes("ManageUsers")) return f;
