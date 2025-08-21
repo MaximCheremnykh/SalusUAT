@@ -1,43 +1,31 @@
+// playwright.config.ts
 import { defineConfig, devices } from "@playwright/test";
 import dotenv from "dotenv";
-
 dotenv.config();
 
 export default defineConfig({
-  // ---------- Test discovery ----------
+  globalSetup: "./utils/global-setup.ts",
   testDir: "./tests",
-  fullyParallel: true,
-  
-
-  // ---------- Reporters ----------
-  // Shows a live ✓ / ✗ list in Git Bash **and** generates an HTML report for CI
-  reporter: [
-    ["list"], // live step list with durations
-    ["html", { open: "always" }], // pretty HTML summary (auto‑opens locally)
-  ],
-
-  // ---------- Shared context ----------
+  reporter: [["list"], ["html", { open: "always" }]],
   use: {
-    baseURL: process.env.BASE_URL,
     storageState: "state.json",
-
-    // Let the browser take the full screen; our POM still forces 1920×1080 if needed
-    viewport: null,
-
+    viewport: { width: 1920, height: 1080 },   // 👈 not null
     headless: process.env.CI ? true : false,
-    launchOptions: {
-      args: ["--start-maximized"], // Chromium only – ignored by WebKit/Firefox
-    },
-
+    launchOptions: { args: ["--start-maximized"] },
     video: "retain-on-failure",
     trace: "on-first-retry",
   },
-
-  // ---------- Projects (per‑browser / per‑device) ----------
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1920, height: 1080 }, // 👈 must not be null with devices
+      },
     },
   ],
 });
+
+
+
+

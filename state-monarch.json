@@ -390,24 +390,20 @@
           "value": "eyJub25jZSI6Ik0taG41UkNCQnVmd08xb2QwNHpxLV84MFN1Nkc3X3hVbGxyS0s3MnUyRzRcdTAwM2QiLCJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImtpZCI6IntcInRcIjpcIjAwRGNwMDAwMDAwMDAwMVwiLFwidlwiOlwiMDJHY3AwMDAwMDAwMDNGXCIsXCJhXCI6XCJjYWltYW5zaWduZXJcIn0iLCJjcml0IjpbImlhdCJdLCJpYXQiOjE3NTU4MTQ4NzgzODgsImV4cCI6MH0=..-FZ0IKXlWncPHKE1tMKR037lGP77SL4LVmmX80hJbeo="
         },
         {
-          "name": "appContextId",
-          "value": "06mcs000001WOppAAG"
-        },
-        {
-          "name": "$AuraClientService.token$desktopDashboards:dashboardApp",
-          "value": "eyJub25jZSI6InVLWjh2X1VEZDNEVUhXX2czblR3X1Z6dXFNY042ME9nSDBIZmsxc0JJWEVcdTAwM2QiLCJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImtpZCI6IntcInRcIjpcIjAwRGNwMDAwMDAwMDAwMVwiLFwidlwiOlwiMDJHY3AwMDAwMDAwMDNGXCIsXCJhXCI6XCJjYWltYW5zaWduZXJcIn0iLCJjcml0IjpbImlhdCJdLCJpYXQiOjE3NTU4MTQ4ODA0NTMsImV4cCI6MH0=..GW942Iy257IO4gmv6iL6zmTK4SOpiA0cdwaAlvJYhnI="
-        },
-        {
-          "name": "GlobalValueProviders__MUTEX_Y",
-          "value": "11519000007066bd0e3f2fc|1755814881092"
-        },
-        {
           "name": "GlobalValueProviders__MUTEX_X",
           "value": "11519000007066bd0e3f2fc|1755814880963"
         },
         {
           "name": "sandboxName",
           "value": "UAT"
+        },
+        {
+          "name": "appContextId",
+          "value": "06mcs000001WOppAAG"
+        },
+        {
+          "name": "$AuraClientService.token$desktopDashboards:dashboardApp",
+          "value": "eyJub25jZSI6InVLWjh2X1VEZDNEVUhXX2czblR3X1Z6dXFNY042ME9nSDBIZmsxc0JJWEVcdTAwM2QiLCJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImtpZCI6IntcInRcIjpcIjAwRGNwMDAwMDAwMDAwMVwiLFwidlwiOlwiMDJHY3AwMDAwMDAwMDNGXCIsXCJhXCI6XCJjYWltYW5zaWduZXJcIn0iLCJjcml0IjpbImlhdCJdLCJpYXQiOjE3NTU4MTQ4ODA0NTMsImV4cCI6MH0=..GW942Iy257IO4gmv6iL6zmTK4SOpiA0cdwaAlvJYhnI="
         }
       ]
     }
