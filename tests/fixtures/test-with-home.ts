@@ -1,6 +1,6 @@
 // tests/fixtures/test-with-home.ts
 import { test as base } from "@playwright/test";
-import { ENV } from "../utils/env";
+import { ENV } from "../../utils/env";
 import { HomeDashboardTabs } from "../../pages/HomeDashboardTabs";
 
 base.use({ storageState: "state-monarch.json" });

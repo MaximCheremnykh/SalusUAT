@@ -3,8 +3,9 @@ name: Smoke
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ master, main ]
   pull_request:
+    branches: [ master, main ]
 
 jobs:
   smoke:
@@ -13,50 +14,90 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            project: smoke-chromium
+            project: chromium
             is_linux: true
           - os: windows-latest
-            project: smoke-edge
+            project: edge
             is_linux: false
 
     runs-on: ${{ matrix.os }}
 
+    # 👉 OPTIONAL: if you know the exact folder that contains package.json,
+    # set it here (quotes are fine for spaces). Otherwise leave empty and
+    # we’ll auto-detect it.
+    env:
+      PROJECT_DIR: ""
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # Resolve folder that has package.json (respects PROJECT_DIR if set)
+      - name: Resolve project directory
+        id: proj
+        shell: bash
+        run: |
+          set -e
+          if [ -n "${PROJECT_DIR}" ] && [ -f "${PROJECT_DIR}/package.json" ]; then
+            DIR="${PROJECT_DIR}"
+          else
+            PKG=$(git ls-files -- "**/package.json" | head -n 1)
+            if [ -z "$PKG" ]; then
+              echo "::error::No package.json found anywhere in the repo"; exit 1
+            fi
+            DIR=$(dirname "$PKG")
+          fi
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+          echo "Resolved project dir: $DIR"
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
+          cache-dependency-path: ${{ steps.proj.outputs.dir }}/package-lock.json
 
       - name: Install deps
-        run: npm ci
+        shell: bash
+        working-directory: ${{ steps.proj.outputs.dir }}
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
 
-      - name: Install Playwright browsers
+      # Linux needs OS deps; Windows uses system Edge
+      - name: Install Playwright browsers (Linux)
+        if: ${{ matrix.is_linux }}
+        shell: bash
+        working-directory: ${{ steps.proj.outputs.dir }}
         run: npx playwright install --with-deps
-        if: ${{ matrix.is_linux }} # includes apt deps on Linux
 
       - name: Install Playwright browsers (Windows)
+        if: ${{ !matrix.is_linux }}
+        shell: bash
+        working-directory: ${{ steps.proj.outputs.dir }}
         run: npx playwright install
-        if: ${{ !matrix.is_linux }} # Edge channel uses system msedge on windows-latest
 
+      # Run only the smoke folder using your existing projects
       - name: Run smoke tests (${{ matrix.project }})
-        run: npx playwright test --project=${{ matrix.project }}
+        shell: bash
+        working-directory: ${{ steps.proj.outputs.dir }}
+        run: npx playwright test tests/smokeTest --project=${{ matrix.project }}
         env:
           SF_USERNAME: ${{ secrets.SF_USERNAME }}
           SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
           SF_LOGIN_URL: ${{ secrets.SF_LOGIN_URL }}
           SF_HOME_URL:  ${{ secrets.SF_HOME_URL }}
-          # Any other env your global-setup or tests expect
 
       - name: Upload HTML report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: report-${{ matrix.project }}
-          path: playwright-report
+          path: ${{ steps.proj.outputs.dir }}/playwright-report
+          if-no-files-found: ignore
           retention-days: 7
 
       - name: Upload traces
@@ -64,7 +105,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: traces-${{ matrix.project }}
-          path: test-results/**/trace.zip
+          path: ${{ steps.proj.outputs.dir }}/test-results/**/trace.zip
+          if-no-files-found: ignore
           retention-days: 7
 
       - name: Upload failure videos
@@ -72,5 +114,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: videos-${{ matrix.project }}
-          path: test-results/**/video.webm
+          path: ${{ steps.proj.outputs.dir }}/test-results/**/video.webm
+          if-no-files-found: ignore
           retention-days: 7
