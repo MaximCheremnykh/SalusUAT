@@ -21,12 +21,12 @@ const METRICS: MetricVariants[] = [
   ["Total Unique PAX"],
   ["Rejected on Ingest (Duplicate/Repeats)"],
   ["P0 PAX Referred to DHS", "P0 PAX Refered to DHS"],
-  ["P2 PAX Initial Outreach"],
+  ["P2 PAX Initial Outreach", "P2 PAX Initial Outreaches"],
   ["P3 PAX Processing"],
-  ["P4 PAX Plane Ticketing"],
-  ["P5 PAX Departure"],
+  ["P4 PAX Plane Ticketing", "P4 PAX Ticketing"],
+  ["P5 PAX Departure", "P5 PAX Departures", "P5 PAX Departure(s)"],
   ["P6 PAX Departed"],
-  ["P7 Resettlement Stipend Paid"],
+  ["P7 Resettlement Stipend Paid", "P7 Stipend Paid"],
 ];
 
 const fmt = new Intl.NumberFormat("en-US");
@@ -84,7 +84,7 @@ function renderMetricsBox(map: Record<string, number>): string {
   return [top, title, body, bottom].join("\n");
 }
 
-test.describe("CSRO Dashboard (Volunteer) : Tadpole tab", () => {
+test.describe("@smokeTest CSRO Dashboard (Volunteer) : Tadpole tab", () => {
   test("Tadpole: header, refresh x2 with toast, metrics heading, click tile", async ({
     page,
   }) => {

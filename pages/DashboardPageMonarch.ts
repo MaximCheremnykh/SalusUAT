@@ -8,7 +8,7 @@ export class DashboardPage {
 
   constructor(page: Page) {
     this.page = page;
-    this._resolveFrames(); // fire-and-forget; callers await waitForDashboardFrames()
+    this._resolveFrames(); 
   }
 
   /* ────────────────────────── VIEWPORT ───────────────────────── */
@@ -21,7 +21,7 @@ export class DashboardPage {
     });
   }
 
-  /** Reset window + inner scrollers to the very top (stable start). */
+  /** Reset window + inner scrollers to the very top */
   async resetDashboardViewport() {
     await this.waitForDashboardFrames();
     await this.dashboardFrame.locator("body").evaluate((body) => {
@@ -134,7 +134,7 @@ export class DashboardPage {
 
   /* ─────────────────────── TAB SWITCH HELPERS ────────────────── */
 
-  /** pick the single visible tab (avoid clones in hidden tablists) */
+  /** pick the single visible tab */
   private async _visibleTab(name: string): Promise<Locator> {
     const list = this.page.locator('[role="tablist"]:not([hidden])').first();
     let tabs = list.getByRole("tab", { name, exact: true });
@@ -324,7 +324,7 @@ export class DashboardPage {
       if (m) return Number(m[1].replace(/,/g, ""));
     }
 
-    // C) Heuristic in DOM: prefer largest, visible number; DO NOT fuse "19,753 100".
+    // C) Heuristic in DOM: prefer largest, visible number.
     const heuristic = await container.evaluate((root) => {
       const months = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
       const banned = ["as of","view report","more dashboard actions","refresh","last refresh","am","pm"];
@@ -389,8 +389,8 @@ export class DashboardPage {
 
     if (heuristic != null) return heuristic;
 
-    // D) Fallback — first STRICTLY comma-grouped number (or plain integer)
-    //    and NOT immediately after a comma.
+    /** D) Fallback — first STRICTLY comma-grouped number (or plain integer)
+        and NOT immediately after a comma.*/
     let full = (await container.innerText()).replace(/\s+/g, " ").trim();
     full = full.replace(/As of .*$/i, "");
     {
@@ -491,6 +491,37 @@ export class DashboardPage {
     await this.refreshDashboardSmart();
     await this.dismissRefreshLimitError().catch(() => void 0);
   }
+  // Exactly two refresh clicks with proper waits (no extra scrolls/retries)
+async refreshTwiceExactly(): Promise<void> {
+  await this.waitForDashboardFrames();
+  const frame = this.dashboardFrame;
+
+  const refreshBtn = frame.getByRole('button', { name: 'Refresh', exact: true }).first();
+  const asOf = frame.locator('span.lastRefreshDate, span', { hasText: /^As of /i }).first();
+  const minuteToast = this.page.getByRole('status')
+    .filter({ hasText: "can't refresh this dashboard more than once in a minute" });
+
+  // 1) First click (ensure enabled)
+  await expect(refreshBtn, 'Refresh should be enabled for first click').toBeEnabled({ timeout: 15_000 });
+  await refreshBtn.click();
+
+  // Let the UI settle after first refresh
+  await asOf.waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
+
+  // If throttle toast appears, wait until it goes away; else wait for button to re-enable
+  const toastVisible = await minuteToast.isVisible().catch(() => false);
+  if (toastVisible) {
+    await minuteToast.waitFor({ state: 'detached', timeout: 65_000 }).catch(() => {});
+  }
+
+  // 2) Second click once re-enabled (max ~65s)
+  await expect(refreshBtn, 'Wait for the 1-minute throttle to lift').toBeEnabled({ timeout: 65_000 });
+  await refreshBtn.click();
+
+  // Optional: confirm second refresh completed
+  await asOf.waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
+}
+
 
   async dismissRefreshLimitError() {
     const toast = this.page.getByText(

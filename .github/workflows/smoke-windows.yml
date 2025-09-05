@@ -1,0 +1,102 @@
+name: "Smoke (Windows: Chrome & Edge)"
+
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  smoke-chrome:
+    name: Smoke — Chrome (Windows)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps
+        run: npm ci
+
+      # Downloads Playwright browsers (Chromium/Firefox/WebKit). Edge uses system msedge.
+      - name: Install Playwright
+        run: npx playwright install
+
+      # If your tests need secrets, uncomment and set them here
+      # env:
+      #   SF_LOGIN_URL: ${{ secrets.SF_LOGIN_URL }}
+      #   SF_HOME_URL:  ${{ secrets.SF_HOME_URL }}
+      #   SF_USER:      ${{ secrets.SF_USER }}
+      #   SF_PWD:       ${{ secrets.SF_PWD }}
+
+      - name: Run smoke tests (Chromium)
+        run: npx playwright test -g "@smokeTest" --project=chromium
+
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-chromium
+          path: playwright-report
+          retention-days: 7
+
+      - name: Upload traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traces-chromium
+          path: test-results/**/trace.zip
+          retention-days: 7
+
+  smoke-edge:
+    name: Smoke — Edge (Windows)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps
+        run: npm ci
+
+      # No need to install Edge; it’s built into the Windows image.
+      # Still run playwright install to ensure other runtime deps are present.
+      - name: Install Playwright
+        run: npx playwright install
+
+      # If your tests need secrets, uncomment and set them here
+      # env:
+      #   SF_LOGIN_URL: ${{ secrets.SF_LOGIN_URL }}
+      #   SF_HOME_URL:  ${{ secrets.SF_HOME_URL }}
+      #   SF_USER:      ${{ secrets.SF_USER }}
+      #   SF_PWD:       ${{ secrets.SF_PWD }}
+
+      - name: Run smoke tests (Edge)
+        run: npx playwright test -g "@smokeTest" --project=edge
+
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-edge
+          path: playwright-report
+          retention-days: 7
+
+      - name: Upload traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traces-edge
+          path: test-results/**/trace.zip
+          retention-days: 7

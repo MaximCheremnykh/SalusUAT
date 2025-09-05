@@ -1,0 +1,76 @@
+name: Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            project: smoke-chromium
+            is_linux: true
+          - os: windows-latest
+            project: smoke-edge
+            is_linux: false
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+        if: ${{ matrix.is_linux }} # includes apt deps on Linux
+
+      - name: Install Playwright browsers (Windows)
+        run: npx playwright install
+        if: ${{ !matrix.is_linux }} # Edge channel uses system msedge on windows-latest
+
+      - name: Run smoke tests (${{ matrix.project }})
+        run: npx playwright test --project=${{ matrix.project }}
+        env:
+          SF_USERNAME: ${{ secrets.SF_USERNAME }}
+          SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
+          SF_LOGIN_URL: ${{ secrets.SF_LOGIN_URL }}
+          SF_HOME_URL:  ${{ secrets.SF_HOME_URL }}
+          # Any other env your global-setup or tests expect
+
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-${{ matrix.project }}
+          path: playwright-report
+          retention-days: 7
+
+      - name: Upload traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traces-${{ matrix.project }}
+          path: test-results/**/trace.zip
+          retention-days: 7
+
+      - name: Upload failure videos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: videos-${{ matrix.project }}
+          path: test-results/**/video.webm
+          retention-days: 7
