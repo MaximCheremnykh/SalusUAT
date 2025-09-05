@@ -1,44 +1,55 @@
-//01.2-fresh-incognito-login.spec.ts
-import { test, expect, chromium } from '@playwright/test';
+// Fresh incognito login using the smoke fixture
+import { test, expect } from "../fixtures/test-smoke";
+import type { Page } from "@playwright/test";
+import { ENV } from "../../utils/env";
 
-const BASE_LOGIN = (process.env.SF_LOGIN_URL ?? '').replace(/\/$/, '');
-const BASE_HOME = (process.env.SF_HOME_URL ?? '').replace(/\/$/, '');
-const USERNAME = process.env.SF_USER ?? process.env.SF_USERNAME ?? '';
-const PASSWORD = process.env.SF_PWD ?? process.env.SF_PASSWORD ?? '';
+// Read creds from env (same as your other spec)
+const USERNAME = process.env.SF_USER ?? process.env.SF_USERNAME ?? "";
+const PASSWORD = process.env.SF_PWD ?? process.env.SF_PASSWORD ?? "";
 
-if (!BASE_LOGIN || !BASE_HOME || !USERNAME || !PASSWORD) {
-  throw new Error('Missing required environment variables.');
+if (!ENV.LOGIN || !ENV.HOME || !USERNAME || !PASSWORD) {
+  throw new Error("Missing required SF_* environment variables.");
 }
 
-test('fresh incognito login from scratch with hard reset', async () => {
-  const browser = await chromium.launch({ headless: false });
-  const context = await browser.newContext();
+async function uiLogin(page: Page): Promise<void> {
+  await page.goto(ENV.LOGIN, { waitUntil: "load" });
 
-  const page = await context.newPage();
+  await page.waitForSelector('input[name="username"]', {
+    state: "visible",
+    timeout: 15_000,
+  });
 
-  // Force-clear all state
-  await context.clearCookies();
-  await page.goto('about:blank');
-  await page.goto(BASE_LOGIN, { waitUntil: 'load' });
-
-  // Wait for login fields to appear
-  const usernameInput = page.locator('input[name="username"]');
-  await expect(usernameInput).toBeVisible({ timeout: 15000 });
-
-  // Fill credentials and login
-  await usernameInput.fill(USERNAME);
-  await page.locator('input[name="pw"]').fill(PASSWORD);
+  await page.fill('input[name="username"]', USERNAME);
+  await page.fill('input[name="pw"]', PASSWORD);
 
   await Promise.all([
-    page.waitForURL(/.*\/lightning\/.*/, { timeout: 45000 }),
-    page.locator('input[name="Login"]').click()
+    page.waitForURL(/\/lightning\//, { timeout: 45_000 }),
+    page.click('input[name="Login"]'),
   ]);
+}
 
-  // Final assertion to confirm login success
+const VPW = Number(process.env.PW_VIEWPORT_W ?? 1860);
+const VPH = Number(process.env.PW_VIEWPORT_H ?? 940);
+
+test('@smokeTest fresh incognito login from scratch with hard reset', async ({ browser }) => {
+  const context = await browser.newContext({
+    viewport: { width: VPW, height: VPH },
+    screen:   { width: VPW, height: VPH }, // harmless for Chromium; helps WebKit
+  });
+  const page = await context.newPage();
+
+  // Clear any accidental state (context is fresh, but safe to call)
+  await context.clearCookies().catch(() => void 0);
+
+  // Full UI login flow
+  await uiLogin(page);
+
+  // Final assertions
   await expect(page).toHaveURL(/\/lightning\//);
   await expect(page.getByRole('link', { name: 'Home' })).toBeVisible();
 
+  // IMPORTANT: close only the context (do NOT close the runner's browser)
   await context.close();
-  await browser.close();
 });
+
 

@@ -1,12 +1,12 @@
-// pages/NavigationMenu.ts
+// pages/NavigationMenus.ts
 import { Page, Locator } from '@playwright/test';
 
-export class NavigationMenu {
+export class NavigationMenus {
   private navBtn: Locator;
   private homeItem: Locator;
 
   constructor(private page: Page) {
-    this.navBtn   = page.getByRole('button',  { name: 'Show Navigation Menu' });
+    this.navBtn   = page.getByRole('button',  { name: 'Show Navigation Menus' });
     this.homeItem = page.getByRole('menuitem', { name: 'Home' });
   }
 

@@ -1,22 +1,44 @@
-//DashboardPageTadpole.ts
+// pages/DashboardPageTadpole.ts
 import { expect, type Locator, type Page, type Frame } from "@playwright/test";
 
 export class DashboardPage {
   readonly page: Page;
   private dashboardFrame!: Frame;
 
-  constructor(page: Page) {
-    this.page = page;
+  constructor(page: Page) { this.page = page; }
+
+  /* ───────────────────────── UTIL ───────────────────────── */
+
+  // Full-title regex tolerant to extra whitespace/case
+  private _titleRx(title: string): RegExp {
+    const esc = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const collapsed = esc.replace(/\s+/g, "\\s+");
+    return new RegExp(`^\\s*${collapsed}\\s*$`, "i");
+  }
+
+  // Prefix matcher for P-metrics (e.g., "P5 PAX")
+  private _prefixRx(title: string): RegExp | null {
+    const m = title.match(/^P\d+\s+PAX/i);
+    return m ? new RegExp(`^\\s*${m[0].replace(/\s+/g, "\\s+")}`, "i") : null;
+  }
+
+  // Keyword helpers (tolerant secondary text match when titles drift)
+  private _keywords(title: string): string[] {
+    const stop = new Set(["the","of","and","or","for","to","a","in","on","by","with","-","—"]);
+    return title.split(/[^A-Za-z0-9]+/g).filter(w => w && !stop.has(w.toLowerCase()));
+  }
+  private _allWordsRegex(title: string): RegExp {
+    const tokens = this._keywords(title).map(t => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    if (!tokens.length) return this._titleRx(title);
+    const lookaheads = tokens.map(t => `(?=.*\\b${t}\\b)`).join("");
+    return new RegExp(`^\\s*${lookaheads}.*$`, "i");
   }
 
   /* ───────────────────────── NAV / COMMON ───────────────────────── */
 
   private async _ensureViewport() {
     await this.page.setViewportSize({ width: 1860, height: 940 });
-    await this.page.evaluate(() => {
-      window.moveTo(0, 0);
-      window.resizeTo(screen.width, screen.height);
-    });
+    await this.page.evaluate(() => { window.moveTo(0, 0); window.resizeTo(screen.width, screen.height); });
   }
 
   /** Public: re-center both page and frame (your spec uses this). */
@@ -29,20 +51,16 @@ export class DashboardPage {
     } catch { /* frame not ready yet is fine */ }
   }
 
-  /** Wait until the Home subtab strip (Monarch/Tadpole/Bogart/Bluebird) is actually visible. */
+  /** Wait until the Home subtab strip (Monarch/Tadpole/Bogart/Bluebird) is visible. */
   private async _waitHomeSubtabsVisible(timeout = 15_000) {
-    const anySubtab = this.page.getByRole("tab", {
-      name: /^(Monarch|Tadpole|Bogart|Bluebird)$/,
-    }).first();
+    const anySubtab = this.page.getByRole("tab", { name: /^(Monarch|Tadpole|Bogart|Bluebird)$/ }).first();
     await expect(anySubtab).toBeVisible({ timeout });
   }
 
   private async _ensureOnHome() {
     if (this.page.url().includes("/lightning/page/home")) {
-      await this._waitHomeSubtabsVisible();
-      return;
+      await this._waitHomeSubtabsVisible(); return;
     }
-
     const menuBtn = this.page.getByRole("button", { name: "Show Navigation Menu" }).first();
     if (await menuBtn.isVisible().catch(() => false)) {
       await menuBtn.click();
@@ -65,7 +83,6 @@ export class DashboardPage {
     const { SF_LOGIN_URL, SF_HOME_URL, SF_USER, SF_PWD } = process.env;
     if (SF_LOGIN_URL) {
       await this.page.goto(SF_LOGIN_URL, { waitUntil: "load" });
-
       const onLogin = await this.page.locator('input[name="username"]').isVisible().catch(() => false);
       if (onLogin) {
         if (!SF_USER || !SF_PWD) throw new Error("Missing SF_USER/SF_PWD for login.");
@@ -78,12 +95,12 @@ export class DashboardPage {
       }
     }
 
-    await this.page.goto(
-      SF_HOME_URL ?? `${(process.env.SF_LOGIN_URL ?? "").replace(/\/$/, "")}/lightning/page/home`,
-      { waitUntil: "load" }
-    ).catch(async () => {
-      await this.page.goto("/lightning/page/home", { waitUntil: "load" });
-    });
+    await this.page
+      .goto(
+        SF_HOME_URL ?? `${(process.env.SF_LOGIN_URL ?? "").replace(/\/$/, "")}/lightning/page/home`,
+        { waitUntil: "load" }
+      )
+      .catch(async () => { await this.page.goto("/lightning/page/home", { waitUntil: "load" }); });
 
     await this._ensureOnHome();
     await this.navigateToTadpoleTab();
@@ -99,10 +116,8 @@ export class DashboardPage {
 
   private async _switchToTab(name: "Monarch" | "Tadpole" | "Bogart" | "Bluebird") {
     await this._ensureOnHome();
-
     const tab = this.page.getByRole("tab", { name, exact: true }).first();
     await expect(tab, `Missing tab: ${name}`).toBeVisible({ timeout: 15_000 });
-
     const already = (await tab.getAttribute("aria-selected")) === "true";
     const oldPanel = this.page.locator('[role="tabpanel"]').filter({ has: this.page.locator("iframe") }).first();
 
@@ -111,7 +126,6 @@ export class DashboardPage {
       await expect(tab).toHaveAttribute("aria-selected", "true", { timeout: 15_000 });
       await oldPanel.waitFor({ state: "hidden", timeout: 10_000 }).catch(() => void 0);
     }
-
     await this._resolveFrameInCurrentPanel();
   }
 
@@ -132,21 +146,17 @@ export class DashboardPage {
       const panel = this.page.locator(`[id="${safe}"]`);
       await panel.waitFor({ state: "attached", timeout });
 
-      await this.page.waitForFunction(
-        (panelId) => {
-          const el = document.getElementById(panelId!);
-          if (!el) return false;
-          const s = getComputedStyle(el);
-          const r = (el as HTMLElement).getBoundingClientRect();
-          const notHidden =
-            !el.hasAttribute("hidden") &&
-            el.getAttribute("aria-hidden") !== "true" &&
-            el.getAttribute("aria-expanded") !== "false";
-          return notHidden && s.display !== "none" && s.visibility !== "hidden" && r.width > 2 && r.height > 2;
-        },
-        id,
-        { timeout }
-      );
+      await this.page.waitForFunction((panelId) => {
+        const el = document.getElementById(panelId!);
+        if (!el) return false;
+        const s = getComputedStyle(el);
+        const r = (el as HTMLElement).getBoundingClientRect();
+        const notHidden =
+          !el.hasAttribute("hidden") &&
+          el.getAttribute("aria-hidden") !== "true" &&
+          el.getAttribute("aria-expanded") !== "false";
+        return notHidden && s.display !== "none" && s.visibility !== "hidden" && r.width > 2 && r.height > 2;
+      }, id, { timeout });
       return panel;
     }
 
@@ -167,7 +177,6 @@ export class DashboardPage {
       });
       if (ok) return panels.nth(i);
     }
-
     throw new Error("No visible tabpanel for the selected tab.");
   }
 
@@ -182,9 +191,7 @@ export class DashboardPage {
           .locator('span.lastRefreshDate, .slds-page-header__title, text="PAX Traveler Status Metrics"')
           .first();
         return (await sig.count()) > 0;
-      } catch {
-        return false;
-      }
+      } catch { return false; }
     };
 
     const searchFrameTree = async (root: Frame): Promise<Frame | null> => {
@@ -207,7 +214,6 @@ export class DashboardPage {
           if (found) { this.dashboardFrame = found; return; }
         }
       }
-
       const outerHandles = await panel.locator("iframe").elementHandles();
       for (const h of outerHandles) {
         const f = await h.contentFrame();
@@ -215,10 +221,8 @@ export class DashboardPage {
         const found = await searchFrameTree(f);
         if (found) { this.dashboardFrame = found; return; }
       }
-
       await this.page.waitForTimeout(250);
     }
-
     throw new Error("Could not attach to the dashboard iframe inside the current tabpanel.");
   }
 
@@ -236,13 +240,11 @@ export class DashboardPage {
 
     const outsideRole = this.page.getByRole("heading", { name: rx }).first();
     if (await outsideRole.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await expect(outsideRole).toBeVisible();
-      return;
+      await expect(outsideRole).toBeVisible(); return;
     }
     const outsideInline = this.page.locator(".slds-page-header__title", { hasText: expected }).first();
     if (await outsideInline.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await expect(outsideInline).toHaveText(rx);
-      return;
+      await expect(outsideInline).toHaveText(rx); return;
     }
 
     const frame = await this.getDashboardFrame();
@@ -274,54 +276,69 @@ export class DashboardPage {
     await frame.locator("body").evaluate((body, px) => {
       const doc = body.ownerDocument!, win = doc.defaultView!;
       win.scrollBy(0, px);
-
       const sels = [".ps-container", ".ps", ".slds-scrollable_y", ".slds-scrollable", "main", "section", "div[role='main']"];
       const els = Array.from(doc.querySelectorAll<HTMLElement>(sels.join(",")));
       const scrollable = els.find(el => {
         const s = win.getComputedStyle(el);
         return el.scrollHeight > el.clientHeight + 2 && /(auto|scroll)/.test(s.overflowY);
       });
-      if (scrollable) scrollable.scrollTop = Math.min(scrollable.scrollTop + px, scrollable.scrollHeight);
+      if (scrollable)
+        scrollable.scrollTop = Math.min(scrollable.scrollTop + px, scrollable.scrollHeight);
     }, pixels);
   }
 
   async scrollToMetric(title: string, opts: { step?: number; maxScrolls?: number } = {}) {
-    const { step = 800, maxScrolls = 30 } = opts;
+    const { step = 800, maxScrolls = 40 } = opts;
     const frame = await this.getDashboardFrame();
 
-    const target = (): Locator =>
-      frame.locator(`xpath=.//*[normalize-space()=${JSON.stringify(title)}]`).first();
+    const rx  = this._titleRx(title);
+    const prx = this._prefixRx(title);
+    const target   = () => frame.getByText(rx).first();
+    const fallback = () => prx ? frame.getByText(prx).first() : frame.locator("__no_match__");
 
-    if (await target().isVisible().catch(() => false)) {
-      await target().scrollIntoViewIfNeeded(); return;
-    }
+    // already visible?
+    if (await target().isVisible().catch(() => false))   { await target().scrollIntoViewIfNeeded();   return; }
+    if (await fallback().isVisible().catch(() => false)) { await fallback().scrollIntoViewIfNeeded(); return; }
 
+    // scan DOWN
     for (let i = 0; i < maxScrolls; i++) {
       await this._scrollDashboardBy(step);
-      if (await target().isVisible().catch(() => false)) {
-        await target().scrollIntoViewIfNeeded(); return;
-      }
+      if (await target().isVisible().catch(() => false))   { await target().scrollIntoViewIfNeeded();   return; }
+      if (await fallback().isVisible().catch(() => false)) { await fallback().scrollIntoViewIfNeeded(); return; }
       await this.page.waitForTimeout(120);
     }
-    throw new Error(`Could not bring "${title}" into view after ${maxScrolls} scrolls.`);
+    // scan UP (in case it was above)
+    for (let i = 0; i < maxScrolls; i++) {
+      await this._scrollDashboardBy(-step);
+      if (await target().isVisible().catch(() => false))   { await target().scrollIntoViewIfNeeded();   return; }
+      if (await fallback().isVisible().catch(() => false)) { await fallback().scrollIntoViewIfNeeded(); return; }
+      await this.page.waitForTimeout(120);
+    }
+    throw new Error(`Could not bring a tile like "${title}" into view after ${maxScrolls}↓ + ${maxScrolls}↑ scrolls.`);
   }
 
-  /** ← strengthened to handle tiles like “Total Unique PAX” reliably */
+  /** Robust number extractor for a metric tile (Bluebird parity). */
   async getMetricValue(tile: string): Promise<number> {
     const frame = await this.getDashboardFrame();
 
-    // 1) Find the exact header text, prefer visible nodes
-    let header = frame.getByText(tile, { exact: true }).first();
+    // 1) Find the header (tolerant + prefix fallback)
+    let header = frame.getByText(this._titleRx(tile)).first();
     if (!(await header.isVisible().catch(() => false))) {
-      // fallback to XPath match
-      header = frame.locator(`xpath=.//*[normalize-space()=${JSON.stringify(tile)}]`).first();
+      const prx = this._prefixRx(tile);
+      header = prx ? frame.getByText(prx).first()
+                   : frame.locator(`xpath=.//*[normalize-space()=${JSON.stringify(tile)}]`).first();
     }
     if (!(await header.isVisible().catch(() => false))) {
       await this.scrollToMetric(tile);
+      header = frame.getByText(this._titleRx(tile)).first();
+      if (!(await header.isVisible().catch(() => false))) {
+        const prx = this._prefixRx(tile);
+        if (prx) header = frame.getByText(prx).first();
+      }
       await expect(header).toBeVisible({ timeout: 10_000 });
     }
 
-    // 2) Try a set of known container ancestors
+    // 2) Candidate containers
     const candidates = [
       `xpath=ancestor::*[starts-with(@id,"widget-canvas-")][1]`,
       `xpath=ancestor::*[contains(@class,"dashboardWidget")][1]`,
@@ -336,15 +353,15 @@ export class DashboardPage {
       if (await c.count()) { container = c; break; }
     }
 
-    // Utility to turn formatted digits into a number
-    const toNum = (s: string) => Number((s.match(/(\d{1,3}(?:,\d{3})+|\d+)/)?.[1] ?? "").replace(/,/g, ""));
+    const toNum = (s: string) =>
+      Number((s.match(/(\d{1,3}(?:,\d{3})+|\d+)/)?.[1] ?? "").replace(/,/g, ""));
 
-    // 3) If we have a container, try several ways to get the number
+    // 3) Within-container strategies
     if (await container.count()) {
       await container.scrollIntoViewIfNeeded();
       await expect(container).toBeVisible({ timeout: 10_000 });
 
-      // A) table-ish → next cell
+      // A) Next table cell
       const siblingCellNumber = container
         .locator(`xpath=(.//ancestor::*[self::th or self::td][1]/following-sibling::*[1])//*[normalize-space()!=""]`)
         .filter({ hasText: /\d/ })
@@ -362,7 +379,7 @@ export class DashboardPage {
         if (Number.isFinite(n)) return n;
       }
 
-      // C) heuristic within the chosen container
+      // C) Heuristic (Bluebird parity) — robust tokenization + “,100/…/900” tail fix
       const heuristic = await container.evaluate((root) => {
         const months = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
         const banned = ["as of","view report","more dashboard actions","refresh","last refresh","am","pm"];
@@ -377,6 +394,25 @@ export class DashboardPage {
         const containerRect = (root as HTMLElement).getBoundingClientRect();
         const els = Array.from(root.querySelectorAll<HTMLElement>("*:not(script):not(style)")).filter(isVisible);
 
+        // Build full set of numeric tokens in this container once (used for tail corrections)
+        const rootAny = root as any;
+        if (!rootAny.__allTokens) {
+          const set = new Set<string>();
+          const re = /\d{1,3}(?:,\d{3})+|\d+/g;
+          for (const e of els) {
+            const t = e.innerText?.trim() || "";
+            const norm = t.replace(/\u00A0/g, " ");
+            let m: RegExpExecArray | null;
+            while ((m = re.exec(norm))) {
+              let j = m.index - 1; while (j >= 0 && /\s/.test(norm[j])) j--;
+              if (j >= 0 && norm[j] === ",") continue; // drop ",100"
+              set.add(m[0]);
+            }
+          }
+          rootAny.__allTokens = set;
+        }
+        const allTokens: Set<string> = rootAny.__allTokens;
+
         let best = { score: -1, num: NaN };
         for (const el of els) {
           const text = el.innerText?.trim(); if (!text) continue;
@@ -386,26 +422,22 @@ export class DashboardPage {
           const r = el.getBoundingClientRect();
           if (containerRect.bottom - r.bottom < nearFooter) continue;
 
-          const normalized = text.replace(/\s+(?=[\d])/g, "");
-          const tokens: string[] = [];
-          {
-            const re = /\d{1,3}(?:,\d{3})+|\d+/g; let m: RegExpExecArray | null;
-            while ((m = re.exec(normalized))) {
-              let j = m.index - 1; while (j >= 0 && /\s/.test(normalized[j])) j--;
-              if (j >= 0 && normalized[j] === ",") continue;
-              tokens.push(m[0]);
-            }
-          }
-          if (!tokens.length) continue;
+          const normalized = text.replace(/\u00A0/g, " "); // NBSP → space
+          const matches = normalized.match(/\d{1,3}(?:,\d{3})+|\d+/g);
+          if (!matches) continue;
+
+          let chosen = matches.find(t => t.includes(",")) ?? matches.reduce((a,b)=> (b.length>a.length?b:a));
+          // Fix spurious trailing ,100..,900 when the shorter prefix exists somewhere else in the container
+          const tail = chosen.match(/^(.*?)(,(100|200|300|400|500|600|700|800|900))$/);
+          if (tail && allTokens.has(tail[1])) chosen = tail[1];
+
+          const value = Number(chosen.replace(/,/g,""));
+          if (!Number.isFinite(value)) continue;
 
           const cs = getComputedStyle(el);
           const font = parseFloat(cs.fontSize || "0");
           const area = r.width * r.height;
           const score = font * 1000 + area;
-
-          const token = tokens.find(t => t.includes(",")) ?? tokens.reduce((a,b)=>(b.length>a.length?b:a));
-          const value = Number(token.replace(/,/g,""));
-          if (!Number.isFinite(value)) continue;
 
           if (score > best.score) best = { score, num: value };
         }
@@ -414,7 +446,7 @@ export class DashboardPage {
       if (heuristic != null) return heuristic;
     }
 
-    // 4) Nearby fallback: walk up a few ancestors and pick the most prominent number
+    // 4) Nearby fallback — walk up ancestors with tail correction
     const nearby = await (await header.elementHandle())!.evaluate((el) => {
       const months = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
       const banned = ["as of","view report","more dashboard actions","refresh","last refresh","am","pm"];
@@ -425,18 +457,47 @@ export class DashboardPage {
         const r = e.getBoundingClientRect(); return r.width > 3 && r.height > 3;
       };
 
+      // Build set of numeric tokens in the current root subtree (cached across nodes)
+      const buildAll = (rootEl: HTMLElement): Set<string> => {
+        const set = new Set<string>();
+        const re = /\d{1,3}(?:,\d{3})+|\d+/g;
+        const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_ELEMENT);
+        let node = walker.currentNode as HTMLElement;
+        while (node) {
+          const t = (node as HTMLElement).innerText?.trim() || "";
+          const norm = t.replace(/\u00A0/g, " ");
+          let m: RegExpExecArray | null;
+          while ((m = re.exec(norm))) {
+            let j = m.index - 1; while (j >= 0 && /\s/.test(norm[j])) j--;
+            if (j >= 0 && norm[j] === ",") continue; // drop ",100"
+            set.add(m[0]);
+          }
+          node = walker.nextNode() as HTMLElement;
+        }
+        return set;
+      };
+
       let root: HTMLElement | null = el as HTMLElement;
       for (let depth = 0; depth < 8 && root; depth++) {
         let best: {score:number, num:number}|null = null;
+
+        const rootAny = root as any;
+        if (!rootAny.__allTokens) rootAny.__allTokens = buildAll(root);
+        const allTokens: Set<string> = rootAny.__allTokens;
+
         for (const n of root.querySelectorAll<HTMLElement>("*:not(script):not(style)")) {
           if (!isVisible(n)) continue;
           const t = n.innerText?.trim(); if (!t) continue;
           const low = t.toLowerCase();
           if (banned.some(b => low.includes(b)) || months.some(m => low.includes(m))) continue;
 
-          const matches = t.match(/(\d{1,3}(?:,\d{3})+|\d+)/g);
+          const matches = t.replace(/\u00A0/g," ").match(/(\d{1,3}(?:,\d{3})+|\d+)/g);
           if (!matches) continue;
-          const raw = matches.find(x => x.includes(",")) ?? matches.reduce((a,b)=> (b.length>a.length?b:a));
+
+          let raw = matches.find(x => x.includes(",")) ?? matches.reduce((a,b)=> (b.length>a.length?b:a));
+          const tail = raw.match(/^(.*?)(,(100|200|300|400|500|600|700|800|900))$/);
+          if (tail && allTokens.has(tail[1])) raw = tail[1];
+
           const val = Number(raw.replace(/,/g,""));
           if (!Number.isFinite(val)) continue;
 
@@ -466,14 +527,24 @@ export class DashboardPage {
   async clickMetric(title: string) {
     const frame = await this.getDashboardFrame();
     await this.scrollToMetric(title).catch(() => void 0);
-    await frame.getByText(title, { exact: true }).first().click();
+    await frame.getByText(this._titleRx(title)).first().click()
+      .catch(async () => {
+        const prx = this._prefixRx(title);
+        if (!prx) throw new Error(`Click failed: "${title}" not found`);
+        await frame.getByText(prx).first().click();
+      });
   }
 
   async clickMetricBody(title: string) {
     const frame = await this.getDashboardFrame();
     await this.scrollToMetric(title).catch(() => void 0);
 
-    const header = frame.getByText(title, { exact: true }).first();
+    let header = frame.getByText(this._titleRx(title)).first();
+    if (!(await header.isVisible().catch(() => false))) {
+      const prx = this._prefixRx(title);
+      header = prx ? frame.getByText(prx).first() : header;
+    }
+
     const candidates = [
       `xpath=ancestor::*[starts-with(@id,"widget-canvas-")][1]`,
       `xpath=ancestor::*[contains(@class,"dashboardWidget")][1]`,
@@ -496,7 +567,29 @@ export class DashboardPage {
   async expectMetricVisible(title: string, timeout = 10_000) {
     const frame = await this.getDashboardFrame();
     await this.scrollToMetric(title).catch(() => void 0);
-    await expect(frame.getByText(title, { exact: true })).toBeVisible({ timeout });
+    const prx = this._prefixRx(title);
+    await expect(
+      frame.getByText(this._titleRx(title)).first()
+        .or(prx ? frame.getByText(prx).first() : frame.locator("__no_match__"))
+    ).toBeVisible({ timeout });
+  }
+
+  /** Guard to ensure numbers are painted before bulk collecting. */
+  async ensureMetricsReady(timeout = 10_000) {
+    const frame = await this.getDashboardFrame();
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+      const hasNum = await frame.evaluate(() => {
+        const banned = /as of|view report|refresh|last refresh|am|pm/i;
+        for (const n of Array.from(document.body.querySelectorAll<HTMLElement>("*:not(script):not(style)"))) {
+          const t = n.innerText?.trim(); if (!t || banned.test(t)) continue;
+          if (/\d{1,3}(?:,\d{3})+|\b\d{2,}\b/.test(t)) return true;
+        }
+        return false;
+      });
+      if (hasNum) return;
+      await this.page.waitForTimeout(150);
+    }
   }
 
   /* ───────────────────────── REFRESH (inside iframe, with fallbacks) ───────────────────────── */
@@ -508,12 +601,8 @@ export class DashboardPage {
       if (!vis) { await this.page.waitForTimeout(120); continue; }
       const disabled = await target.getAttribute("disabled");
       const ariaDis = await target.getAttribute("aria-disabled");
-      try {
-        if (!disabled && ariaDis !== "true") {
-          await target.click({ trial: true });
-          return true;
-        }
-      } catch {}
+      try { if (!disabled && ariaDis !== "true") { await target.click({ trial: true }); return true; } }
+      catch {}
       await this.page.waitForTimeout(150);
     }
     return false;
@@ -553,10 +642,7 @@ export class DashboardPage {
   private async _waitRefreshDone(prevTs?: string | null) {
     const frame = await this.getDashboardFrame();
     const ts = frame.locator("span.lastRefreshDate").first();
-
-    if (prevTs) {
-      try { await expect(ts).not.toHaveText(prevTs, { timeout: 10_000 }); return; } catch {}
-    }
+    if (prevTs) { try { await expect(ts).not.toHaveText(prevTs, { timeout: 10_000 }); return; } catch {} }
     const btn = await this._findRefreshInFrame();
     if (btn) await this._isClickable(btn, 10_000);
   }

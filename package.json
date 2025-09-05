@@ -2,13 +2,26 @@
   "name": "playwrightjs",
   "version": "1.0.0",
   "type": "module",
+  "private": true,
   "scripts": {
-    "test": "npx playwright test",
-    "test:headed": "npx playwright test --headed",
-    "test:debug": "npx playwright test --debug",
-    "test:one": "npx playwright test tests/login.spec.ts",
-    "test:smoke": "playwright test --project=smoke",
-    "test:home": "npx playwright test tests/03-home-dashboard.spec.ts"
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:list": "playwright test --list",
+    "test:spec": "playwright test",
+    "report": "playwright show-report",
+
+    "smoke": "playwright test -g \"@smokeTest\"",
+    "smoke:list": "playwright test -g \"@smokeTest\" --list",
+
+    "smoke:chrome": "playwright test -g \"@smokeTest\" --project=chromium",
+    "smoke:edge": "playwright test -g \"@smokeTest\" --project=edge",
+
+    "smoke:chrome:headed": "playwright test -g \"@smokeTest\" --project=chromium --headed",
+    "smoke:edge:headed": "playwright test -g \"@smokeTest\" --project=edge --headed",
+
+    "smoke:chrome:debug": "PWDEBUG=1 playwright test -g \"@smokeTest\" --project=chromium --headed",
+    "smoke:edge:debug": "PWDEBUG=1 playwright test -g \"@smokeTest\" --project=edge --headed"
   },
   "devDependencies": {
     "@playwright/test": "^1.54.1",

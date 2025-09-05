@@ -7,8 +7,10 @@
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "skipLibCheck": true
+    
+    
   },
-  // 👇 add every folder that contains .ts files
+  // add every folder that contains .ts files
   "include": [
     "tests/**/*.ts",
     "utils/**/*.ts",

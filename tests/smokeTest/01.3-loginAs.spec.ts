@@ -12,7 +12,7 @@ async function step(title: string, fn: () => Promise<void>) {
   catch (err) { console.log("❌", title); throw err; }
 }
 
-test.describe("Login as another user via Setup", () => {
+test.describe("@smokeTest Login as another user via Setup", () => {
   test("should switch to Qais Adeel and land on Home", async ({ page }) => {
     const dash = new DashboardPage(page);
     const setup = new SetupPage(page);

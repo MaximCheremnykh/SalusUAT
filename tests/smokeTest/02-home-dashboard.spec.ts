@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { DashboardPage } from "../../pages/DashboardPage";
+import { DashboardPage } from "../../pages/DashboardPageMonarch";
 test.setTimeout(2 * 60 * 1000);  // allow up to 2 min for all tab switches
 
 /*──────────────────────── helper for console logging ─────────────────────*/
@@ -28,7 +28,7 @@ const metrics = [
 ];
 
 /*──────────────────────  MAIN TEST  ──────────────────────────*/
-test.describe("CSRO Dashboard (Volunteer)", () => {
+test.describe("@smokeTest CSRO Dashboard (Volunteer)", () => {
   test("metric values render and are numeric", async ({ page }) => {
     const dash = new DashboardPage(page);
 

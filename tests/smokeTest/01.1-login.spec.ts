@@ -1,5 +1,6 @@
 //01.1-login.spec.ts
-import { test, expect, chromium, type Page } from '@playwright/test';
+import { test, expect } from "../fixtures/test-smoke";
+import type { Page } from "@playwright/test";
 
 const BASE_LOGIN = (process.env.SF_LOGIN_URL ?? '').replace(/\/$/, '');
 const BASE_HOME = (process.env.SF_HOME_URL ?? '').replace(/\/$/, '');
@@ -23,7 +24,7 @@ async function uiLogin(page: Page): Promise<void> {
   ]);
 }
 
-test.describe('Salesforce UI login flow', () => {
+test.describe('@smokeTest Salesforce UI login flow', () => {
 
   test('reuse session when already logged‑in', async ({ page }) => {
     await page.goto(BASE_HOME, { waitUntil: 'load' });
