@@ -5,3 +5,7 @@ test-results/
 .env
 .DS_Store
 state*.json
+
+# ignore nested repos
+SalusUAT.git/
+SalusUAT/
