@@ -14,3 +14,7 @@ SalusUAT/
 state*.json
 playwright-report/
 test-results/
+
+# Ignore nested repo folders
+SalusUAT.git/
+SalusUAT/
