@@ -9,3 +9,8 @@ state*.json
 # ignore nested repos
 SalusUAT.git/
 SalusUAT/
+
+# Never commit Playwright state or reports
+state*.json
+playwright-report/
+test-results/
