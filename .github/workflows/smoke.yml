@@ -3,9 +3,9 @@ name: Smoke
 on:
   workflow_dispatch:
   push:
-    branches: [ master, main ]
+    branches: [ master, main, full-root ]
   pull_request:
-    branches: [ master, main ]
+    branches: [ master, main, full-root ]
 
 jobs:
   smoke:
