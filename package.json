@@ -10,27 +10,29 @@
     "test:list": "playwright test --list",
     "test:spec": "playwright test",
     "report": "playwright show-report",
-
     "smoke": "playwright test -g \"@smokeTest\"",
     "smoke:list": "playwright test -g \"@smokeTest\" --list",
-
     "smoke:chrome": "playwright test -g \"@smokeTest\" --project=chromium",
     "smoke:edge": "playwright test -g \"@smokeTest\" --project=edge",
-
     "smoke:chrome:headed": "playwright test -g \"@smokeTest\" --project=chromium --headed",
     "smoke:edge:headed": "playwright test -g \"@smokeTest\" --project=edge --headed",
-
     "smoke:chrome:debug": "PWDEBUG=1 playwright test -g \"@smokeTest\" --project=chromium --headed",
-    "smoke:edge:debug": "PWDEBUG=1 playwright test -g \"@smokeTest\" --project=edge --headed"
+    "smoke:edge:debug": "PWDEBUG=1 playwright test -g \"@smokeTest\" --project=edge --headed",
+    "bdd": "npx playwright-bdd -c ./bdd.config.ts",
+    "test:bdd": "npm run bdd && npx playwright test tests/bdd-gen",
+    "bdd:headed": "npm run bdd && npx playwright test tests/bdd-gen --headed",
+    "bdd:chrome": "npm run bdd && npx playwright test tests/bdd-gen --project=chromium",
+    "bdd:edge": "npm run bdd && npx playwright test tests/bdd-gen --project=edge"
   },
   "devDependencies": {
+    "@cucumber/cucumber": "^12.2.0",
     "@playwright/test": "^1.54.1",
-    "@types/electron": "^1.4.38",
-    "@types/node": "^24.0.14",
-    "dotenv": "^17.2.0",
-    "electron": "^37.2.3",
+    "@types/cucumber": "^6.0.1",
+    "@types/node": "^20.14.2",
+    "dotenv": "^16.4.5",
+    "playwright-bdd": "^8.4.1",
     "ts-node": "^10.9.2",
-    "typescript": "^5.8.3"
+    "typescript": "^5.5.4"
   },
   "playwright": {
     "globalSetup": "./utils/global-setup.ts"

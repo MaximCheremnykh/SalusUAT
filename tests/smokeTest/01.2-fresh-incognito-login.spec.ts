@@ -1,55 +1,105 @@
-// Fresh incognito login using the smoke fixture
-import { test, expect } from "../fixtures/test-smoke";
-import type { Page } from "@playwright/test";
-import { ENV } from "../../utils/env";
+// tests/smokeTest/01.2-fresh-incognito-login.spec.ts
+import { test, expect, chromium, type Page } from "@playwright/test";
+import { ENV } from "../../utils/env"; // one level up from smokeTest
 
-// Read creds from env (same as your other spec)
 const USERNAME = process.env.SF_USER ?? process.env.SF_USERNAME ?? "";
-const PASSWORD = process.env.SF_PWD ?? process.env.SF_PASSWORD ?? "";
+const PASSWORD = process.env.SF_PWD  ?? process.env.SF_PASSWORD  ?? "";
 
 if (!ENV.LOGIN || !ENV.HOME || !USERNAME || !PASSWORD) {
-  throw new Error("Missing required SF_* environment variables.");
+  throw new Error("❌ Missing required SF_* environment variables.");
 }
 
-async function uiLogin(page: Page): Promise<void> {
-  await page.goto(ENV.LOGIN, { waitUntil: "load" });
+/* ───────────────────── Maximize (CDP + viewport) ───────────────────── */
+async function forceMaxViewport(page: Page) {
+  try {
+    const cdp = await page.context().newCDPSession(page);
+    const { windowId } = await cdp.send("Browser.getWindowForTarget");
+    await cdp.send("Browser.setWindowBounds", {
+      windowId,
+      bounds: { windowState: "maximized" },
+    });
 
-  await page.waitForSelector('input[name="username"]', {
-    state: "visible",
-    timeout: 15_000,
-  });
+    const [w, h] = await page.evaluate(() => [window.innerWidth, window.innerHeight]);
+    await page.setViewportSize({
+      width: Math.max(1920, Math.trunc(w || 2560)),
+      height: Math.max(1080, Math.trunc(h || 1440)),
+    });
+  } catch {
+    // Headless / non-Chromium fallback
+    await page.setViewportSize({ width: 2560, height: 1440 });
+  }
+}
 
-  await page.fill('input[name="username"]', USERNAME);
-  await page.fill('input[name="pw"]', PASSWORD);
+/* ───────────────────── Robust fresh login ───────────────────── */
+async function ensureLoggedIn(page: Page): Promise<void> {
+  await page.goto(ENV.LOGIN, { waitUntil: "domcontentloaded" });
 
-  await Promise.all([
-    page.waitForURL(/\/lightning\//, { timeout: 45_000 }),
-    page.click('input[name="Login"]'),
+  // Already in Lightning?
+  const homeLink = page.getByRole("link", { name: /Home/i });
+  if (page.url().includes("/lightning/") && await homeLink.isVisible().catch(() => false)) {
+    return;
+  }
+
+  // Wait for either app or login form
+  const userSel = 'input[name="username"], #username';
+  const passSel = 'input[name="pw"], input[name="password"], #password';
+  const btnSel  = 'input[name="Login"], #Login, button[type="submit"]';
+
+  const outcome = await Promise.race([
+    homeLink.waitFor({ state: "visible", timeout: 8_000 }).then(() => "home").catch(() => null),
+    page.waitForSelector(userSel, { state: "visible", timeout: 8_000 }).then(() => "form").catch(() => null),
+    page.waitForURL(/\/lightning\//, { timeout: 8_000 }).then(() => "lightning").catch(() => null),
   ]);
+
+  if (outcome === "home" || outcome === "lightning") {
+    await page.goto(ENV.HOME, { waitUntil: "load" });
+    return;
+  }
+
+  if (outcome !== "form") {
+    throw new Error(`❌ Neither Lightning nor login form detected. Current URL: ${page.url()}`);
+  }
+
+  // Classic login
+  await page.fill(userSel, USERNAME);
+  await page.fill(passSel, PASSWORD);
+  await Promise.all([
+    page.waitForURL(/\/lightning\//, { timeout: 60_000 }),
+    page.click(btnSel),
+  ]);
+
+  await page.goto(ENV.HOME, { waitUntil: "load" });
 }
 
-const VPW = Number(process.env.PW_VIEWPORT_W ?? 1860);
-const VPH = Number(process.env.PW_VIEWPORT_H ?? 940);
+/* ───────────────────────────── Test ───────────────────────────── */
+test("@smokeTest fresh incognito login from scratch (Chrome)", async () => {
+  const isCI = !!process.env.CI;
 
-test('@smokeTest fresh incognito login from scratch with hard reset', async ({ browser }) => {
-  const context = await browser.newContext({
-    viewport: { width: VPW, height: VPH },
-    screen:   { width: VPW, height: VPH }, // harmless for Chromium; helps WebKit
+  // Fresh browser
+  const browser = await chromium.launch({
+    headless: isCI ? true : false,
+    channel: "chrome",
+    args: [
+      "--start-maximized",
+      "--window-position=0,0",
+      "--window-size=2560,1440", // big window even if maximize is ignored
+    ],
   });
+
+  // ✅ Create context with NO viewport option to avoid the dSF/null conflict
+  const context = await browser.newContext();
   const page = await context.newPage();
 
-  // Clear any accidental state (context is fresh, but safe to call)
-  await context.clearCookies().catch(() => void 0);
+  // Same maximize fix as 01.1
+  await forceMaxViewport(page);
 
-  // Full UI login flow
-  await uiLogin(page);
+  await ensureLoggedIn(page);
 
-  // Final assertions
   await expect(page).toHaveURL(/\/lightning\//);
-  await expect(page.getByRole('link', { name: 'Home' })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Home/i })).toBeVisible();
 
-  // IMPORTANT: close only the context (do NOT close the runner's browser)
   await context.close();
+  await browser.close();
 });
 
 

@@ -1,22 +1,17 @@
-// tsconfig.json – ensure TypeScript can see the utils folder
 {
   "compilerOptions": {
-    "target": "ES2019",
-    "module": "CommonJS",
+    "target": "ESNext",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "types": ["node", "@cucumber/cucumber", "playwright-bdd"],
     "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "strict": true,
-    "skipLibCheck": true
-    
-    
+    "skipLibCheck": true,
+    "resolveJsonModule": true
   },
-  // add every folder that contains .ts files
-  "include": [
-    "tests/**/*.ts",
-    "utils/**/*.ts",
-    "pages/**/*.ts",
-    "locators/**/*.ts"
-  ]
+  "include": ["tests", "steps", "features"]
 }
+
+
+
 
 
