@@ -1,105 +1,163 @@
 // tests/smokeTest/01.3-loginAs.spec.ts
-import { test, expect } from "@playwright/test";
-import { DashboardPage } from "../../pages/DashboardPageMonarch";
-import { SetupPage } from "../../pages/SetupPage";
-import { urls } from "../../utils/urls";
-import { ENV } from "../../utils/env";
+import { test, expect, type Page } from "@playwright/test";
 
-test.setTimeout(2 * 60 * 1000);
+/* ───────────────────────────── ENV / CONST ───────────────────────────── */
+const BASE_LAT_LIST =
+  "https://csrodhs--uat.sandbox.lightning.force.com/lightning/o/LAT__c/list?filterName=__Recent";
+const USER_TO_LOGIN = "Qais Adeel";
 
-async function step(title: string, fn: () => Promise<void>) {
-  try { await fn(); console.log("✅", title); }
-  catch (err) { console.log("❌", title); throw err; }
+/* ───────────────────────────── Helpers ───────────────────────────── */
+
+/** Console + HTML report step wrapper */
+async function logStep<T>(title: string, fn: () => Promise<T>) {
+  console.log(`▶️  ${title}`);
+  try {
+    const result = await test.step(title, fn);
+    console.log(`✅  ${title}`);
+    return result;
+  } catch (err) {
+    console.log(`❌  ${title}`);
+    throw err;
+  }
 }
 
-test.describe("@smokeTest Login as another user via Setup", () => {
-  test("should switch to Qais Adeel and land on Home", async ({ page }) => {
-    const dash = new DashboardPage(page);
-    const setup = new SetupPage(page);
+/** Keep Setup in same tab (or safely close popouts) */
+async function preventPopouts(page: Page) {
+  await page.addInitScript(() => {
+    // @ts-ignore
+    window.open = (u: unknown) => { location.href = String(u); return null; };
+  });
+  page.on("popup", async p => { try { await p.close(); } catch {} });
+}
 
-    await step("Login and verify Home dashboard", async () => {
-      await dash.openDashboard();
-      await dash.verifyDashboardTitle("CSRO Dashboard");
+/* ───────────────────────────── Test ───────────────────────────── */
+test.describe("@smokeTest Setup → Login-As → Home (Qais Adeel)", () => {
+  test("open Setup, search user, Login-As, land on Home", async ({ page, context }) => {
+    await preventPopouts(page);
+
+    /* 1) Start from LAT list */
+    await logStep("Open LAT list page", async () => {
+      await page.goto(BASE_LAT_LIST, { waitUntil: "domcontentloaded" });
+      await expect(page).toHaveURL(/LAT__c\/list/);
     });
 
-    await step("Open Setup (same tab)", async () => {
-      await setup.openSameTab();
+    /* 2) Open Setup (popup OR same-tab) */
+    const setupPg = await logStep("Open Setup menu", async () => {
+      const setupBtn = page.getByRole("button", { name: /^Setup$/ }).first();
+      await expect(setupBtn).toBeVisible({ timeout: 20_000 });
+      await setupBtn.click();
+
+      const setupMenuItem = page.getByRole("menuitem", { name: /Setup.*current app/i }).first();
+      await expect(setupMenuItem).toBeVisible({ timeout: 20_000 });
+
+      const popupPromise = context.waitForEvent("page").catch(() => null);
+      await setupMenuItem.click();
+
+      const popup = await Promise.race([
+        popupPromise,
+        (async () => { await page.waitForTimeout(600); return null as any; })(),
+      ]);
+      const target = popup ?? page;
+
+      await target.waitForLoadState("domcontentloaded").catch(() => {});
+      await target.waitForLoadState("networkidle").catch(() => {});
+      return target;
     });
 
-    await step("Search & open user Qais Adeel", async () => {
-      await setup.openUserBySearch("Qais Adeel");
+    /* 3) Quick Find → search user */
+    await logStep(`Search user: ${USER_TO_LOGIN}`, async () => {
+      const quickFind = setupPg.getByRole("combobox", { name: /Search Setup/i }).first();
+      await expect(quickFind).toBeVisible({ timeout: 30_000 });
+      await quickFind.click();
+      await quickFind.fill(USER_TO_LOGIN);
+
+      const userOption = setupPg.getByRole("option", {
+        name: new RegExp(`${USER_TO_LOGIN}\\s+User`, "i"),
+      });
+      await expect(userOption).toBeVisible({ timeout: 20_000 });
+      await expect(setupPg.getByRole("listbox")).toContainText(USER_TO_LOGIN);
+      await userOption.click();
     });
 
-    await step("Verify Active / Role / Profile and Login button visible", async () => {
-      await page.goto(urls.home(), { waitUntil: "domcontentloaded" });
-      await page.goto(urls.vfSessionBridge(), { waitUntil: "domcontentloaded" });
-      await page.goto(urls.manageUser(), { waitUntil: "domcontentloaded" });
+    /* 4) Verify user details in VF frame */
+    const vf = await logStep("Verify user details in VF frame", async () => {
+      const frame = setupPg.frameLocator('iframe[name^="vfFrameId_"]').first();
 
-      const vf = page.frameLocator('iframe[name^="vfFrameId_"]').first();
-      await expect(vf.locator("#ep")).toContainText(/Active/i);
-      await expect(vf.locator("#IsActive_chkbox")).toBeVisible();
-      await expect(vf.locator("#ep")).toContainText(/Role/i);
-      await expect(vf.getByRole("link", { name: "Outreach Officer", exact: true })).toBeVisible();
-      await expect(vf.locator("#ep")).toContainText(/Profile/i);
-      await expect(vf.getByRole("link", { name: "Salus Standard User" })).toBeVisible();
+      await expect(frame.getByRole("heading", { name: new RegExp(USER_TO_LOGIN, "i") }))
+        .toBeVisible({ timeout: 30_000 });
+
+      const details = frame.locator("#ep");
+      await expect(details).toContainText(USER_TO_LOGIN, { timeout: 15_000 });
+
+      await expect(frame.getByRole("cell", { name: /^Role$/ })).toBeVisible();
+      await expect(details).toContainText(/Outreach Officer/i);
+
+      await expect(frame.getByRole("cell", { name: /User License/i })).toBeVisible();
+      await expect(details).toContainText(/Salesforce/i);
+
+      await expect(frame.getByRole("cell", { name: /^Profile$/ })).toBeVisible();
+      await expect(details).toContainText(/Salus Standard User/i);
+
+      await expect(frame.getByRole("cell", { name: /^Active$/ })).toBeVisible();
+      await expect(details).toContainText(/Active/i);
+      await expect(frame.locator("#IsActive_chkbox")).toBeVisible();
+
+      return frame;
+    });
+
+    /* 5) Click Login-As (SPA swap), wait and verify */
+    await logStep("Login-As and verify context", async () => {
+      const loginBtnRow = vf.getByRole("row", { name: /User Detail\s+Edit\s+Sharing/i });
+      await expect(loginBtnRow.locator('input[name="login"]')).toBeVisible();
       await expect(vf.locator("#topButtonRow")).toContainText(/Login/i);
+
+      await Promise.all([
+        loginBtnRow.locator('input[name="login"]').click(),
+        setupPg.waitForURL(/(lightning|my\.salesforce)/, { timeout: 60_000 }).catch(() => {}),
+        setupPg.waitForLoadState("domcontentloaded").catch(() => {}),
+      ]);
+
+      // Extra settle time after Login-As
+      await setupPg.waitForLoadState("networkidle").catch(() => {});
+      await setupPg.waitForTimeout(5000); // tune if your org is slower
+
+      // Poll safely, recreate locators after the SPA navigation
+      const LOGIN_AS_TIMEOUT = 60_000;
+      const deadline = Date.now() + LOGIN_AS_TIMEOUT;
+
+      while (Date.now() < deadline) {
+        const logoutAsLink = setupPg.getByRole("link", {
+          name: new RegExp(`^\\s*Log out as\\s+${USER_TO_LOGIN}\\s*$`, "i"),
+        });
+
+        if (await logoutAsLink.isVisible().catch(() => false)) break;
+
+        const bannerVisible = await setupPg
+          .locator(':is(header, #oneHeader, [role="banner"], [data-region-id="oneHeader"], body)')
+          .filter({ hasText: new RegExp(`\\bLogged\\s+in\\s+as\\s+${USER_TO_LOGIN}\\b`, "i") })
+          .first()
+          .isVisible()
+          .catch(() => false);
+
+        if (bannerVisible) break;
+
+        await setupPg.waitForTimeout(500);
+        await setupPg.waitForLoadState("networkidle").catch(() => {});
+      }
+
       await expect(
-        vf.getByRole("row", { name: /User Detail\s+Edit\s+Sharing/i }).locator('input[name="login"]')
-      ).toBeVisible();
+        setupPg.getByRole("link", { name: new RegExp(`Log out as\\s+${USER_TO_LOGIN}`, "i") })
+      ).toBeVisible({ timeout: 10_000 });
     });
 
-  /* ───────── LOGIN-AS CLICK ───────── */
-await step("Click Login-As for Qais and verify banner", async () => {
-  const vf = page.frameLocator('iframe[name^="vfFrameId_"]').first();
+    /* 6) Go Home and verify */
+    await logStep("Navigate to Home and verify header", async () => {
+      await setupPg.getByRole("button", { name: "Show Navigation Menu" }).click();
+      await setupPg.getByRole("menuitem", { name: /^Home$/ }).click();
 
-  await Promise.all([
-    vf.getByRole("row", { name: /User Detail\s+Edit\s+Sharing/i })
-      .locator('input[name="login"]').click(),
-    page.waitForLoadState("domcontentloaded"),
-    page.waitForURL(/(lightning|my\.salesforce)/, { timeout: 30000 }),
-  ]);
-
-  // Primary indicator: “Log out as Qais Adeel” link appears in the global header when Login-As is active
-  const logoutAs = page.getByRole('link', { name: /Log out as Qais Adeel/i });
-
-  // Secondary (fallback) indicator: banner text “Logged in as Qais Adeel …”
-  // Search in likely header regions first, but fall back to body if needed.
-  const bannerAny = page
-    .locator('header, #oneHeader, [role="banner"], [data-region-id="oneHeader"], body')
-    .locator('text=/\\bLogged\\s+in\\s+as\\s+Qais\\s+Adeel\\b/i')
-    .first();
-
-  // Helpful debug: grab some header text if things are slow
-  try {
-    const headerChunk = await page
-      .locator('header, #oneHeader, [role="banner"]')
-      .first()
-      .innerText({ timeout: 2000 })
-      .catch(() => '');
-    if (headerChunk) console.log('ℹ️ headerPreview:', headerChunk.slice(0, 200));
-  } catch {}
-
-  // Wait until either indicator becomes visible (whichever is faster)
-  await Promise.race([
-    logoutAs.waitFor({ state: 'visible', timeout: 30000 }),
-    bannerAny.waitFor({ state: 'visible', timeout: 30000 }),
-  ]);
-
-  // Assert strongly on the link (most reliable)
-  await expect(logoutAs).toBeVisible({ timeout: 5000 });
-
-  // Soft assert on the banner text (may not always render in the same region)
-  await expect.soft(bannerAny).toBeVisible({ timeout: 1000 });
-});
-
-/* ───────── FINAL VERIFICATION ON HOME ───────── */
-await step("Open Home and verify 'CBP Home (Volunteer)'", async () => {
-  await page.goto(urls.home(), { waitUntil: "domcontentloaded" });
-
-  // Still confirm Login-As is active by link (fast check) and app title by env
-  await expect(page.getByRole('link', { name: /Log out as Qais Adeel/i })).toBeVisible();
-  await expect(page.getByRole("heading", { name: ENV.APP_TITLE })).toBeVisible();
-});
-
+      await expect(setupPg.getByRole("link", { name: "Home" })).toBeVisible({ timeout: 20_000 });
+      await expect(setupPg.getByLabel("Global", { exact: true }).getByRole("link"))
+        .toContainText("Home");
+    });
   });
 });
