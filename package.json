@@ -6,23 +6,8 @@
   "scripts": {
     "test": "playwright test",
     "test:headed": "playwright test --headed",
-    "test:debug": "playwright test --debug",
-    "test:list": "playwright test --list",
-    "test:spec": "playwright test",
-    "report": "playwright show-report",
-    "smoke": "playwright test -g \"@smokeTest\"",
-    "smoke:list": "playwright test -g \"@smokeTest\" --list",
-    "smoke:chrome": "playwright test -g \"@smokeTest\" --project=chromium",
-    "smoke:edge": "playwright test -g \"@smokeTest\" --project=edge",
-    "smoke:chrome:headed": "playwright test -g \"@smokeTest\" --project=chromium --headed",
-    "smoke:edge:headed": "playwright test -g \"@smokeTest\" --project=edge --headed",
-    "smoke:chrome:debug": "PWDEBUG=1 playwright test -g \"@smokeTest\" --project=chromium --headed",
-    "smoke:edge:debug": "PWDEBUG=1 playwright test -g \"@smokeTest\" --project=edge --headed",
-    "bdd": "npx playwright-bdd -c ./bdd.config.ts",
-    "test:bdd": "npm run bdd && npx playwright test tests/bdd-gen",
-    "bdd:headed": "npm run bdd && npx playwright test tests/bdd-gen --headed",
-    "bdd:chrome": "npm run bdd && npx playwright test tests/bdd-gen --project=chromium",
-    "bdd:edge": "npm run bdd && npx playwright test tests/bdd-gen --project=edge"
+    "auth:lat": "npx playwright codegen https://csrodhs--uat.sandbox.lightning.force.com --storage-state=state-lat.json"
+
   },
   "devDependencies": {
     "@cucumber/cucumber": "^12.2.0",

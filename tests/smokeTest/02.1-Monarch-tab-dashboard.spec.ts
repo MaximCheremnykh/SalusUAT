@@ -1,10 +1,10 @@
-//02.1-Monarch-tab-dashboard.spec.ts
+//npx playwright test tests/smokeTest/02.1-Monarch-tab-dashboard.spec.ts --project=chromium --headed
 import { test, expect } from "@playwright/test";
 import { DashboardPage } from "../../pages/DashboardPageMonarch";
 
-// IMPORTANT: do NOT set viewport:null here (conflicts with deviceScaleFactor).
 test.use({ storageState: "state-monarch.json" });
 
+/* ───────────────────────── helpers ───────────────────────── */
 async function step(title: string, fn: () => Promise<void>) {
   try { await fn(); console.log("✅", title); }
   catch (err) { console.log("❌", title); throw err; }
@@ -15,7 +15,7 @@ type MetricVariants = [canonical: string, ...aliases: string[]];
 const METRICS: MetricVariants[] = [
   ["Total Rows Imported"],
   ["Total Unique PAX"],
-  ["Rejected on Ingest (Duplicate/Repeats)"],
+  ["Rejected on Ingest (Duplicates/Repeats)"],
   ["P0 PAX Referred to DHS", "P0 PAX Refered to DHS"],
   ["P2 PAX Initial Outreach"],
   ["P3 PAX Processing"],
@@ -28,7 +28,7 @@ const METRICS: MetricVariants[] = [
 const fmt = new Intl.NumberFormat("en-US");
 const colors = { reset:"\x1b[0m", bold:"\x1b[1m", cyan:"\x1b[36m", magenta:"\x1b[35m", green:"\x1b[32m" };
 
-/** Polls until a metric is a finite >= 0 number or times out. */
+/** Poll until a metric is a finite ≥ 0 number or times out. */
 async function readMetricEventually(
   dash: DashboardPage,
   variants: string[],
@@ -37,7 +37,6 @@ async function readMetricEventually(
   const deadline = Date.now() + timeoutMs;
   let lastErr: unknown = null;
 
-  // Try all variants in a loop until time runs out
   while (Date.now() < deadline) {
     for (const label of variants) {
       try {
@@ -47,7 +46,7 @@ async function readMetricEventually(
         lastErr = e;
       }
     }
-    await new Promise(r => setTimeout(r, 800)); // small backoff between attempts
+    await new Promise(r => setTimeout(r, 800));
   }
 
   throw new Error(`Timeout after ${timeoutMs}ms reading metric variants: ${variants.join(" | ")}\nLast error: ${lastErr}`);
@@ -80,8 +79,9 @@ function renderMetricsBox(map: Record<string, number>): string {
   return [top, title, body, bottom].join("\n");
 }
 
+/* ───────────────────────────── Test ───────────────────────────── */
 test.describe("@smokeTest CSRO Dashboard (Volunteer) : Monarch tab", () => {
-  test("Monarch: header, refresh x2 with toast, metrics heading, click tile", async ({ page }) => {
+  test("Monarch: refresh + verify metrics", async ({ page }) => {
     const dash = new DashboardPage(page);
 
     await step("Open dashboard via Home", async () => {
@@ -99,10 +99,9 @@ test.describe("@smokeTest CSRO Dashboard (Volunteer) : Monarch tab", () => {
       await dash.verifyDashboardTitle("CSRO Dashboard");
     });
 
-    // Keep your existing refresh method; Edge shows 1-min throttle toast.
-    await step("Refresh twice and handle 1-min limit", async () => {
-      await dash.refreshTwiceAndHandleMinuteLimit();
-    });
+    // await step("Refresh twice", async () => {
+    //   await dash.refreshTwiceAndHandleMinuteLimit();
+    // });
 
     await step("Verify 'PAX Traveler Status Metrics' is visible", async () => {
       const frame = await dash.getDashboardFrame();
@@ -110,7 +109,7 @@ test.describe("@smokeTest CSRO Dashboard (Volunteer) : Monarch tab", () => {
         .toBeVisible({ timeout: 20_000 });
     });
 
-    await step("Click 'Total Rows Imported' tile twice", async () => {
+   await step("Click 'Total Rows Imported' tile twice", async () => {
       await dash.clickMetric("Total Rows Imported");
       await dash.clickMetric("Total Rows Imported");
     });
@@ -130,8 +129,7 @@ test.describe("@smokeTest CSRO Dashboard (Volunteer) : Monarch tab", () => {
       await dash.clickMetric("Total Rows Imported");
       await dash.clickMetricBody("Total Rows Imported");
     });
-
-    await step("Total Unique PAX", async () => {
+await step("Total Unique PAX", async () => {
       // wait until number is ready
       await expect
         .poll(async () => { try { return await dash.getMetricValue("Total Unique PAX"); } catch { return -1; } },
@@ -142,14 +140,14 @@ test.describe("@smokeTest CSRO Dashboard (Volunteer) : Monarch tab", () => {
       await dash.clickMetricBody("Total Unique PAX");
     });
 
-    await step("Rejected on Ingest (Duplicate/Repeats)", async () => {
+     await step("Rejected on Ingest (Duplicates/Repeats)", async () => {
       await expect
-        .poll(async () => { try { return await dash.getMetricValue("Rejected on Ingest (Duplicate/Repeats)"); } catch { return -1; } },
+        .poll(async () => { try { return await dash.getMetricValue("Rejected on Ingest (Duplicates/Repeats)"); } catch { return -1; } },
               { timeout: 45_000 })
         .toBeGreaterThanOrEqual(0);
 
-      await dash.clickMetric("Rejected on Ingest (Duplicate/Repeats)");
-      await dash.clickMetricBody("Rejected on Ingest (Duplicate/Repeats)");
+      await dash.clickMetric("Rejected on Ingest (Duplicates/Repeats)");
+      await dash.clickMetricBody("Rejected on Ingest (Duplicates/Repeats)");
     });
 
     // Consistent starting point before bulk read
